@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## Future Release 
+
+### Fixed
+
+- Renamed `tet_x_plane!()` to `calculate_plane_tetrahedron_intersection!()`
+- Adjusted logic in `calculate_plane_tetrahedron_intersection!()` to better determine intersection
+- Separated functionality of intersection determination and coordinate assignment in `calculate_plane_tetrahedron_intersection!()` into subfunctions
+
 ## [3.0.1] - 2025-04-16
 
 ### Fixed
