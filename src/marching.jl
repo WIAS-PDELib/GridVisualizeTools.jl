@@ -44,23 +44,32 @@ function tet_x_plane!(
     end
     # Interpolate coordinates and function_values according to
     # evaluation of the plane equation
-    nxs = 0
+    intersection_count = 0
+    # List to check whether a node has already been visited, when checking for possible intersections
+    visited_list = @MArray zeros(Bool, 4)
     @inbounds @simd for n1 in 1:3
         N1 = node_indices[n1]
         @inbounds @fastmath @simd for n2 in (n1 + 1):4
             N2 = node_indices[n2]
-            if planeq_values[n1] != planeq_values[n2] &&
-                    planeq_values[n1] * planeq_values[n2] < tol
-                nxs += 1
+
+            if planeq_values[n1] * planeq_values[n2] < tol && !visited_list[n1] && !visited_list[n2]
+
+                abs(planeq_values[n1]) < tol && (visited_list[n1] = true)
+                abs(planeq_values[n2]) < tol && (visited_list[n2] = true)
+
+                intersection_count += 1
                 t = planeq_values[n1] / (planeq_values[n1] - planeq_values[n2])
-                ixcoord[1, nxs] = pointlist[1, N1] + t * (pointlist[1, N2] - pointlist[1, N1])
-                ixcoord[2, nxs] = pointlist[2, N1] + t * (pointlist[2, N2] - pointlist[2, N1])
-                ixcoord[3, nxs] = pointlist[3, N1] + t * (pointlist[3, N2] - pointlist[3, N1])
-                ixvalues[nxs] = function_values[N1] + t * (function_values[N2] - function_values[N1])
+                ixcoord[1, intersection_count] = pointlist[1, N1] + t * (pointlist[1, N2] - pointlist[1, N1])
+                ixcoord[2, intersection_count] = pointlist[2, N1] + t * (pointlist[2, N2] - pointlist[2, N1])
+                ixcoord[3, intersection_count] = pointlist[3, N1] + t * (pointlist[3, N2] - pointlist[3, N1])
+                ixvalues[intersection_count] = function_values[N1] + t * (function_values[N2] - function_values[N1])
             end
         end
     end
-    return nxs
+    if intersection_count > 4
+        @warn "computed $intersection_count intersection points of a tetrahedron and a plane. Expected at most 4."
+    end
+    return intersection_count
 end
 
 """
@@ -190,7 +199,7 @@ function marching_tetrahedra(
 
     function pushtris(ns, ixcoord, ixvalues)
         # number of intersection points can be 3 or 4
-        return if ns >= 3
+        if ns >= 3
             last_i = length(all_ixvalues)
             for is in 1:ns
                 @views push!(all_ixcoord, ixcoord[:, is])
@@ -201,6 +210,7 @@ function marching_tetrahedra(
                 push!(all_ixfaces, (last_i + 3, last_i + 2, last_i + 4))
             end
         end
+        return nothing
     end
 
     for igrid in 1:length(allcoords)

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## Future Release 
+
+### Fixed
+
+- Reworked `tet_x_plane!()` to improve tetrahedron-plane-crosssection
+
 ## [3.0.0] - 2025-03-03
 
 ### Changed
