@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Future Release 
+## [3.0.1] - 2025-04-16
 
 ### Fixed
 
