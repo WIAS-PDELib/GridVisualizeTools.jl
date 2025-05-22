@@ -1,3 +1,39 @@
+function assign_coordinates_at_point_in_plane!(
+        ixcoord,
+        ixvalues,
+        coordinates,
+        function_values,
+        node_index,
+        intersection_count
+    )
+
+    @views ixcoord[:, intersection_count] .= coordinates[:, node_index]
+    ixvalues[intersection_count] = function_values[node_index]
+
+    return nothing
+
+end
+
+function assign_coordinates_at_intersection!(
+        ixcoord,
+        ixvalues,
+        coordinates,
+        function_values,
+        planeq_values_start,
+        planeq_values_end,
+        node_index_start,
+        node_index_end,
+        intersection_count
+    )
+
+    t = planeq_values_start / (planeq_values_start - planeq_values_end)
+    @views @. ixcoord[:, intersection_count] = coordinates[:, node_index_start] + t * (coordinates[:, node_index_end] - coordinates[:, node_index_start])
+    ixvalues[intersection_count] = function_values[node_index_start] + t * (function_values[node_index_end] - function_values[node_index_start])
+
+    return nothing
+end
+
+
 """
   $(SIGNATURES)
   Calculate intersections between tetrahedron with given piecewise linear
@@ -10,8 +46,8 @@
   and the plane.
 
   Input: 
-  - pointlist: 3xN array of grid point coordinates
-  - node_indices: 4 element array of node indices (pointing into pointlist and function_values)
+  - coordinates: 3xN array of grid point coordinates
+  - node_indices: 4 element array of node indices (pointing into coordinates and function_values)
   - planeq_values: 4 element array of plane equation evaluated at the node coordinates
   - function_values: N element array of function values
 
@@ -20,15 +56,15 @@
   - ixvalues: 4 element array of function values at plane - tetdedge intersections
 
   Returns:
-  - nxs,ixcoord,ixvalues
+  - amount_intersections,ixcoord,ixvalues
   
   This method can be used both for the evaluation of plane sections and for
   the evaluation of function isosurfaces.
 """
-function tet_x_plane!(
+function calculate_plane_tetrahedron_intersection!(
         ixcoord,
         ixvalues,
-        pointlist,
+        coordinates,
         node_indices,
         planeq_values,
         function_values;
@@ -42,34 +78,32 @@ function tet_x_plane!(
         )
         return 0
     end
-    # Interpolate coordinates and function_values according to
-    # evaluation of the plane equation
-    intersection_count = 0
-    # List to check whether a node has already been visited, when checking for possible intersections
-    visited_list = @MArray zeros(Bool, 4)
-    @inbounds @simd for n1 in 1:3
+
+    amount_intersections = 0
+
+    @inbounds for n1 in 1:4
         N1 = node_indices[n1]
-        @inbounds @fastmath @simd for n2 in (n1 + 1):4
-            N2 = node_indices[n2]
-
-            if planeq_values[n1] * planeq_values[n2] < tol && !visited_list[n1] && !visited_list[n2]
-
-                abs(planeq_values[n1]) < tol && (visited_list[n1] = true)
-                abs(planeq_values[n2]) < tol && (visited_list[n2] = true)
-
-                intersection_count += 1
-                t = planeq_values[n1] / (planeq_values[n1] - planeq_values[n2])
-                ixcoord[1, intersection_count] = pointlist[1, N1] + t * (pointlist[1, N2] - pointlist[1, N1])
-                ixcoord[2, intersection_count] = pointlist[2, N1] + t * (pointlist[2, N2] - pointlist[2, N1])
-                ixcoord[3, intersection_count] = pointlist[3, N1] + t * (pointlist[3, N2] - pointlist[3, N1])
-                ixvalues[intersection_count] = function_values[N1] + t * (function_values[N2] - function_values[N1])
+        if abs(planeq_values[n1]) < tol
+            amount_intersections += 1
+            assign_coordinates_at_point_in_plane!(ixcoord, ixvalues, coordinates, function_values, N1, amount_intersections)
+        else
+            for n2 in (n1 + 1):4
+                N2 = node_indices[n2]
+                if (abs(planeq_values[n2]) < tol) # We do not allow the 2nd node to be in the plane
+                    continue
+                end
+                if planeq_values[n1] * planeq_values[n2] < tol^2
+                    amount_intersections += 1
+                    assign_coordinates_at_intersection!(ixcoord, ixvalues, coordinates, function_values, planeq_values[n1], planeq_values[n2], N1, N2, amount_intersections)
+                end
             end
         end
     end
-    if intersection_count > 4
-        @warn "computed $intersection_count intersection points of a tetrahedron and a plane. Expected at most 4."
+
+    if amount_intersections > 4
+        @warn "computed $(amount_intersections) intersection points of a tetrahedron and a plane. Expected at most 4."
     end
-    return intersection_count
+    return amount_intersections
 end
 
 """
@@ -231,7 +265,7 @@ function marching_tetrahedra(
                 planeq[2] = all_planeq[node_indices[2]]
                 planeq[3] = all_planeq[node_indices[3]]
                 planeq[4] = all_planeq[node_indices[4]]
-                nxs = tet_x_plane!(
+                nxs = calculate_plane_tetrahedron_intersection!(
                     ixcoord,
                     ixvalues,
                     coord,
