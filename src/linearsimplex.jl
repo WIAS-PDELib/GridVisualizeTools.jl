@@ -1,3 +1,7 @@
+"""
+    LinearSimplex
+Linear simplex with point coordinates and node values.
+"""
 struct LinearSimplex{D, N, Tv}
     points::SVector{N, Point{D, Tv}}
     values::SVector{N, Tv}

@@ -61,7 +61,7 @@ end
   This method can be used both for the evaluation of plane sections and for
   the evaluation of function isosurfaces.
 """
-function calculatCe_plane_tetrahedron_intersection!(
+function calculate_plane_tetrahedron_intersection!(
         ixcoord,
         ixvalues,
         coordinates,
