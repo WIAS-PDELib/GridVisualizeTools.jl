@@ -15,11 +15,13 @@ RGB{Float64}(0.85,0.6,0.6)
 
 """
 function region_cmap(n)
-    ColorSchemes.distinguishable_colors(max(5, n),
-                                        [Colors.RGB(0.85, 0.6, 0.6), Colors.RGB(0.6, 0.85, 0.6), Colors.RGB(0.6, 0.6, 0.85)];
-                                        lchoices = range(70; stop = 80, length = 5),
-                                        cchoices = range(25; stop = 65, length = 15),
-                                        hchoices = range(20; stop = 360, length = 15))
+    return ColorSchemes.distinguishable_colors(
+        max(5, n),
+        [Colors.RGB(0.85, 0.6, 0.6), Colors.RGB(0.6, 0.85, 0.6), Colors.RGB(0.6, 0.6, 0.85)];
+        lchoices = range(70; stop = 80, length = 5),
+        cchoices = range(25; stop = 65, length = 15),
+        hchoices = range(20; stop = 360, length = 15)
+    )
 end
 
 """
@@ -38,11 +40,13 @@ RGB{Float64}(1.0,0.0,0.0)
 
 """
 function bregion_cmap(n)
-    ColorSchemes.distinguishable_colors(max(5, n),
-                                        [Colors.RGB(1.0, 0.0, 0.0), Colors.RGB(0.0, 1.0, 0.0), Colors.RGB(0.0, 0.0, 1.0)];
-                                        lchoices = range(50; stop = 75, length = 10),
-                                        cchoices = range(75; stop = 100, length = 10),
-                                        hchoices = range(20; stop = 360, length = 30))
+    return ColorSchemes.distinguishable_colors(
+        max(5, n),
+        [Colors.RGB(1.0, 0.0, 0.0), Colors.RGB(0.0, 1.0, 0.0), Colors.RGB(0.0, 0.0, 1.0)];
+        lchoices = range(50; stop = 75, length = 10),
+        cchoices = range(75; stop = 100, length = 10),
+        hchoices = range(20; stop = 360, length = 30)
+    )
 end
 
 """
@@ -56,7 +60,7 @@ RGB{Float64}(1.0,0.0,0.0)
 """
 function Colors.RGB(c::String)
     c64 = Colors.color_names[c]
-    Colors.RGB(c64[1] / 255, c64[2] / 255, c64[3] / 255)
+    return Colors.RGB(c64[1] / 255, c64[2] / 255, c64[3] / 255)
 end
 
 """
