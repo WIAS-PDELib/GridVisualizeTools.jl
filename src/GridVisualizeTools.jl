@@ -1,3 +1,8 @@
+"""
+    GridVisualizeTools
+
+$(read(joinpath(@__DIR__, "..", "README.md"), String))
+"""
 module GridVisualizeTools
 
 import Colors
@@ -5,10 +10,10 @@ import ColorSchemes
 
 using DocStringExtensions: SIGNATURES, TYPEDEF, TYPEDSIGNATURES
 using StaticArraysCore: SVector
-using GeometryBasics: Point
+using StaticArrays: @MArray
 
 include("colors.jl")
-export region_cmap, bregion_cmap, rgbtuple
+export region_cmap, bregion_cmap, rgbtuple, rgbcolor
 
 include("extraction.jl")
 export extract_visible_cells3D, extract_visible_bfaces3D

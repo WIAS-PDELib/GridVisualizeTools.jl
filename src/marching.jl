@@ -1,3 +1,39 @@
+function assign_coordinates_at_point_in_plane!(
+        ixcoord,
+        ixvalues,
+        coordinates,
+        function_values,
+        node_index,
+        intersection_count
+    )
+
+    @views ixcoord[:, intersection_count] .= coordinates[:, node_index]
+    ixvalues[intersection_count] = function_values[node_index]
+
+    return nothing
+
+end
+
+function assign_coordinates_at_intersection!(
+        ixcoord,
+        ixvalues,
+        coordinates,
+        function_values,
+        planeq_values_start,
+        planeq_values_end,
+        node_index_start,
+        node_index_end,
+        intersection_count
+    )
+
+    t = planeq_values_start / (planeq_values_start - planeq_values_end)
+    @views @. ixcoord[:, intersection_count] = coordinates[:, node_index_start] + t * (coordinates[:, node_index_end] - coordinates[:, node_index_start])
+    ixvalues[intersection_count] = function_values[node_index_start] + t * (function_values[node_index_end] - function_values[node_index_start])
+
+    return nothing
+end
+
+
 """
   $(SIGNATURES)
   Calculate intersections between tetrahedron with given piecewise linear
@@ -10,25 +46,25 @@
   and the plane.
 
   Input: 
-  - pointlist: 3xN array of grid point coordinates
-  - node_indices: 4 element array of node indices (pointing into pointlist and function_values)
+  - coordinates: 3xN array of grid point coordinates
+  - node_indices: 4 element array of node indices (pointing into coordinates and function_values)
   - planeq_values: 4 element array of plane equation evaluated at the node coordinates
   - function_values: N element array of function values
 
   Mutates:
   - ixcoord: 3x4 array of plane - tetedge intersection coordinates
-  - ixvalues: 4 element array of fuction values at plane - tetdedge intersections
+  - ixvalues: 4 element array of function values at plane - tetdedge intersections
 
   Returns:
-  - nxs,ixcoord,ixvalues
+  - amount_intersections,ixcoord,ixvalues
   
   This method can be used both for the evaluation of plane sections and for
   the evaluation of function isosurfaces.
 """
-function tet_x_plane!(
+function calculatCe_plane_tetrahedron_intersection!(
         ixcoord,
         ixvalues,
-        pointlist,
+        coordinates,
         node_indices,
         planeq_values,
         function_values;
@@ -42,25 +78,31 @@ function tet_x_plane!(
         )
         return 0
     end
-    # Interpolate coordinates and function_values according to
-    # evaluation of the plane equation
-    nxs = 0
-    @inbounds @simd for n1 in 1:3
+    amount_intersections = 0
+
+    @inbounds for n1 in 1:4
         N1 = node_indices[n1]
-        @inbounds @fastmath @simd for n2 in (n1 + 1):4
-            N2 = node_indices[n2]
-            if planeq_values[n1] != planeq_values[n2] &&
-                    planeq_values[n1] * planeq_values[n2] < tol
-                nxs += 1
-                t = planeq_values[n1] / (planeq_values[n1] - planeq_values[n2])
-                ixcoord[1, nxs] = pointlist[1, N1] + t * (pointlist[1, N2] - pointlist[1, N1])
-                ixcoord[2, nxs] = pointlist[2, N1] + t * (pointlist[2, N2] - pointlist[2, N1])
-                ixcoord[3, nxs] = pointlist[3, N1] + t * (pointlist[3, N2] - pointlist[3, N1])
-                ixvalues[nxs] = function_values[N1] + t * (function_values[N2] - function_values[N1])
+        if abs(planeq_values[n1]) < tol
+            amount_intersections += 1
+            assign_coordinates_at_point_in_plane!(ixcoord, ixvalues, coordinates, function_values, N1, amount_intersections)
+        else
+            for n2 in (n1 + 1):4
+                N2 = node_indices[n2]
+                if (abs(planeq_values[n2]) < tol) # We do not allow the 2nd node to be in the plane
+                    continue
+                end
+                if planeq_values[n1] * planeq_values[n2] < tol^2
+                    amount_intersections += 1
+                    assign_coordinates_at_intersection!(ixcoord, ixvalues, coordinates, function_values, planeq_values[n1], planeq_values[n2], N1, N2, amount_intersections)
+                end
             end
         end
     end
-    return nxs
+
+    if amount_intersections > 4
+        @warn "computed $(amount_intersections) intersection points of a tetrahedron and a plane. Expected at most 4."
+    end
+    return amount_intersections
 end
 
 """
@@ -71,7 +113,7 @@ end
  flevel could be flevels
  xyzcut could be a vector of plane data
  perhaps we can also collect isolines.
- Just an optional collector parameter, defaulting to somethig makie independent.
+ Just an optional collector parameter, defaulting to something makie independent.
 
     Better yet:
 
@@ -118,7 +160,7 @@ Return values: (points, tris, values)
 
 These can be readily turned into a mesh with function values on it.
 
-Caveat: points with similar coordinates are not identified, e.g. an intersection of a plane and an edge will generate as many edge intersection points as there are tetrahedra adjacent to that edge. As a consequence, normal calculations for visualization alway will end up with facet normals, not point normals, and the visual impression of a rendered isosurface will show its piecewise linear genealogy.
+Caveat: points with similar coordinates are not identified, e.g. an intersection of a plane and an edge will generate as many edge intersection points as there are tetrahedra adjacent to that edge. As a consequence, normal calculations for visualization always will end up with facet normals, not point normals, and the visual impression of a rendered isosurface will show its piecewise linear genealogy.
 
 """
 function marching_tetrahedra(
@@ -201,6 +243,7 @@ function marching_tetrahedra(
                 push!(all_ixfaces, (last_i + 3, last_i + 2, last_i + 4))
             end
         end
+        return nothing
     end
 
     for igrid in 1:length(allcoords)
@@ -221,7 +264,7 @@ function marching_tetrahedra(
                 planeq[2] = all_planeq[node_indices[2]]
                 planeq[3] = all_planeq[node_indices[3]]
                 planeq[4] = all_planeq[node_indices[4]]
-                nxs = tet_x_plane!(
+                nxs = calculate_plane_tetrahedron_intersection!(
                     ixcoord,
                     ixvalues,
                     coord,
@@ -259,43 +302,80 @@ end
 """
     $(SIGNATURES)
 
-Collect isoline snippets on triangles ready for linesegments!
+March through the given grid and extract points and values for given iso-line levels and/or given intersection lines.
+From the returned point list and value list a line plot can be created.
+
+Input:
+    coord: matrix storing the coordinates of the grid
+    cellnodes: connectivity matrix
+    func: function on the grid nodes to be evaluated
+    lines: vector of line definitions [a,b,c], s.t., ax + by + c = 0 defines a line
+    levels: vector of levels for the iso-surface
+    Tc: scalar type of coordinates
+    Tp: vector type of coordinates
+    Tv: scalar type of function values
+
+Output:
+    points: vector of 2D points of the intersections of the grid with the iso-surfaces or lines
+    adjacencies: vector of 2D vectors storing connected points in the grid
+    value: interpolated values of `func` at the intersection points
+
+Note that passing both nonempty `lines` and `levels` will create a result with both types of points mixed.
 """
 function marching_triangles(
-        coord::Matrix{Tv},
+        coord::Matrix{T},
         cellnodes::Matrix{Ti},
         func,
+        lines,
         levels;
-        Tc = Float32,
-        Tp = SVector{2, Tc}
-    ) where {Tv <: Number, Ti <: Number}
-    return marching_triangles([coord], [cellnodes], [func], levels; Tc, Tp)
+        Tc = T,
+        Tp = SVector{2, Tc},
+        Tv = Float64
+    ) where {T <: Number, Ti <: Number}
+    return marching_triangles([coord], [cellnodes], [func], lines, levels; Tc, Tp, Tv)
 end
 
+
+"""
+    $(SIGNATURES)
+
+
+Variant of `marching_triangles` with multiple grid input
+"""
 function marching_triangles(
-        coords::Vector{Matrix{Tv}},
+        coords::Vector{Matrix{T}},
         cellnodes::Vector{Matrix{Ti}},
         funcs,
+        lines,
         levels;
-        Tc = Float32,
-        Tp = SVector{2, Tc}
-    ) where {Tv <: Number, Ti <: Number}
+        Tc = T,
+        Tp = SVector{2, Tc},
+        Tv = Float64
+    ) where {T <: Number, Ti <: Number}
     points = Vector{Tp}(undef, 0)
-
+    values = Vector{Tv}(undef, 0)
+    adjacencies = Vector{SVector{2, Ti}}(undef, 0)
     for igrid in 1:length(coords)
         func = funcs[igrid]
         coord = coords[igrid]
 
-        function isect(nodes)
+        # pre-allcate memory for triangle values (3 nodes per triangle)
+        objective_values = Vector{Tv}(undef, 3)
+
+        # the objective_func is used to determine the intersection (line equation or iso levels)
+        # the value_func is used to interpolate values at the intersections
+        function isect(tri_nodes, objective_func, value_func)
             (i1, i2, i3) = (1, 2, 3)
 
-            f = (func[nodes[1]], func[nodes[2]], func[nodes[3]])
+            # 3 values of the objective function
+            f = objective_func
 
+            # sort f[i1] ≤ f[i2] ≤ f[i3]
             f[1] <= f[2] ? (i1, i2) = (1, 2) : (i1, i2) = (2, 1)
             f[i2] <= f[3] ? i3 = 3 : (i2, i3) = (3, i2)
             f[i1] > f[i2] ? (i1, i2) = (i2, i1) : nothing
 
-            (n1, n2, n3) = (nodes[i1], nodes[i2], nodes[i3])
+            (n1, n2, n3) = (tri_nodes[i1], tri_nodes[i2], tri_nodes[i3])
 
             dx31 = coord[1, n3] - coord[1, n1]
             dx21 = coord[1, n2] - coord[1, n1]
@@ -305,35 +385,66 @@ function marching_triangles(
             dy21 = coord[2, n2] - coord[2, n1]
             dy32 = coord[2, n3] - coord[2, n2]
 
-            df31 = f[i3] != f[i1] ? 1 / (f[i3] - f[i1]) : 0.0
-            df21 = f[i2] != f[i1] ? 1 / (f[i2] - f[i1]) : 0.0
-            df32 = f[i3] != f[i2] ? 1 / (f[i3] - f[i2]) : 0.0
+            df31 = f[i3] != f[i1] ? 1 / (f[i1] - f[i3]) : 0.0
+            df21 = f[i2] != f[i1] ? 1 / (f[i1] - f[i2]) : 0.0
+            df32 = f[i3] != f[i2] ? 1 / (f[i2] - f[i3]) : 0.0
 
-            for level in levels
-                if (f[i1] <= level) && (level < f[i3])
-                    α = (level - f[i1]) * df31
-                    x1 = coord[1, n1] + α * dx31
-                    y1 = coord[2, n1] + α * dy31
+            if (f[i1] <= 0) && (0 < f[i3])
+                α = f[i1] * df31
+                x1 = coord[1, n1] + α * dx31
+                y1 = coord[2, n1] + α * dy31
+                value1 = value_func[n1] + α * (value_func[n3] - value_func[n1])
 
-                    if (level < f[i2])
-                        α = (level - f[i1]) * df21
-                        x2 = coord[1, n1] + α * dx21
-                        y2 = coord[2, n1] + α * dy21
-                    else
-                        α = (level - f[i2]) * df32
-                        x2 = coord[1, n2] + α * dx32
-                        y2 = coord[2, n2] + α * dy32
-                    end
-                    push!(points, SVector{2, Tc}((x1, y1)))
-                    push!(points, SVector{2, Tc}((x2, y2)))
+                if (0 < f[i2])
+                    α = f[i1] * df21
+                    x2 = coord[1, n1] + α * dx21
+                    y2 = coord[2, n1] + α * dy21
+                    value2 = value_func[n1] + α * (value_func[n2] - value_func[n1])
+                else
+                    α = f[i2] * df32
+                    x2 = coord[1, n2] + α * dx32
+                    y2 = coord[2, n2] + α * dy32
+                    value2 = value_func[n2] + α * (value_func[n3] - value_func[n2])
                 end
+
+                push!(points, SVector{2, Tc}((x1, y1)))
+                push!(points, SVector{2, Tc}((x2, y2)))
+                push!(values, value1)
+                push!(values, value2)
+                # connect last two points
+                push!(adjacencies, SVector{2, Ti}((length(points) - 1, length(points))))
             end
             return
         end
 
         for itri in 1:size(cellnodes[igrid], 2)
-            @views isect(cellnodes[igrid][:, itri])
+
+            # nodes of the current triangle
+            tri_nodes = @views cellnodes[igrid][:, itri]
+
+            for level in levels
+                # objective func is iso-level equation
+                @views @fastmath map!(
+                    inode -> (func[inode] - level),
+                    objective_values,
+                    tri_nodes
+                )
+                @views isect(tri_nodes, objective_values, func)
+            end
+
+            for line in lines
+                @fastmath line_equation(line, coord) = coord[1] * line[1] + coord[2] * line[2] + line[3]
+
+                # objective func is iso-level equation
+                @views @fastmath map!(
+                    inode -> (line_equation(line, coord[:, inode])),
+                    objective_values,
+                    tri_nodes
+                )
+                @views isect(tri_nodes, objective_values, func)
+            end
+
         end
     end
-    return points
+    return points, adjacencies, values
 end
