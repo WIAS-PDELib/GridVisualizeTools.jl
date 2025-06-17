@@ -11,7 +11,7 @@ import ColorSchemes
 using DocStringExtensions: SIGNATURES, TYPEDEF, TYPEDSIGNATURES
 using StaticArraysCore: SVector
 using StaticArrays: @MArray
-using GeometryBasics # replace by SArray! 
+using GeometryBasics # replace by SArray!
 
 include("colors.jl")
 export region_cmap, bregion_cmap, rgbtuple, rgbcolor
