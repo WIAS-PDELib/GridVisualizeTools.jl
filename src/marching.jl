@@ -145,6 +145,7 @@ Input parameters:
 - `func`: n_points vector of piecewise linear function values
 - `planes`: vector of plane equations `ax+by+cz+d=0`,each  stored as vector [a,b,c,d]
 - `flevels`: vector of function isolevels
+- `return_parent_cells`: if true, the parent cell indices are returned as a forth argument
 
 Keyword arguments:
 - `tol`: tolerance for tet x plane intersection
@@ -154,10 +155,11 @@ Keyword arguments:
 - `Tp`:  type of points returned
 - `Tf`:  type of facets returned
 
-Return values: (points, tris, values)
+Return values: (points, tris, values, [parents])
 - `points`: vector of points (Tp)
 - `tris`: vector of triangles (Tf)
 - `values`: vector of function values (Tv)
+- `parents`: vector of parent cell indices according to the `tris`
 
 These can be readily turned into a mesh with function values on it.
 
@@ -170,6 +172,7 @@ function marching_tetrahedra(
         func,
         planes,
         flevels;
+        return_parent_cells = false,
         tol = 1.0e-12,
         primepoints = zeros(0, 0),
         primevalues = zeros(0),
@@ -183,6 +186,7 @@ function marching_tetrahedra(
         [func],
         planes,
         flevels;
+        return_parent_cells,
         tol,
         primepoints,
         primevalues,
@@ -198,6 +202,7 @@ function marching_tetrahedra(
         allfuncs,
         planes,
         flevels;
+        return_parent_cells = false,
         tol = 1.0e-12,
         primepoints = zeros(0, 0),
         primevalues = zeros(0),
@@ -215,6 +220,7 @@ function marching_tetrahedra(
     all_ixfaces = Vector{Tf}(undef, 0)
     all_ixcoord = Vector{Tp}(undef, 0)
     all_ixvalues = Vector{Tv}(undef, 0)
+    all_parentcells = Vector{Ti}(undef, 0)
 
     @assert(length(primevalues) == size(primepoints, 2))
     for iprime in 1:size(primepoints, 2)
@@ -231,7 +237,7 @@ function marching_tetrahedra(
     # Function to evaluate plane equation
     @inbounds @fastmath plane_equation(plane, coord) = coord[1] * plane[1] + coord[2] * plane[2] + coord[3] * plane[3] + plane[4]
 
-    function pushtris(ns, ixcoord, ixvalues)
+    function pushtris(ns, ixcoord, ixvalues, itet)
         # number of intersection points can be 3 or 4
         if ns >= 3
             last_i = length(all_ixvalues)
@@ -240,8 +246,10 @@ function marching_tetrahedra(
                 push!(all_ixvalues, ixvalues[is]) # todo consider nan_replacement here
             end
             push!(all_ixfaces, (last_i + 1, last_i + 2, last_i + 3))
+            push!(all_parentcells, itet)
             if ns == 4
                 push!(all_ixfaces, (last_i + 3, last_i + 2, last_i + 4))
+                push!(all_parentcells, itet)
             end
         end
         return nothing
@@ -274,7 +282,7 @@ function marching_tetrahedra(
                     func;
                     tol = tol
                 )
-                pushtris(nxs, ixcoord, ixvalues)
+                pushtris(nxs, ixcoord, ixvalues, itet)
             end
         end
 
@@ -297,7 +305,12 @@ function marching_tetrahedra(
             calcxs()
         end
     end
-    return all_ixcoord, all_ixfaces, all_ixvalues
+
+    if return_parent_cells
+        return all_ixcoord, all_ixfaces, all_ixvalues, all_parentcells
+    else
+        return all_ixcoord, all_ixfaces, all_ixvalues
+    end
 end
 
 """
@@ -312,6 +325,7 @@ Input:
     func: function on the grid nodes to be evaluated
     lines: vector of line definitions [a,b,c], s.t., ax + by + c = 0 defines a line
     levels: vector of levels for the iso-surface
+    return_parent_cells: if true, a vector of parent cell indices according to the adjacencies is returned as a forth argument
     Tc: scalar type of coordinates
     Tp: vector type of coordinates
     Tv: scalar type of function values
@@ -320,6 +334,7 @@ Output:
     points: vector of 2D points of the intersections of the grid with the iso-surfaces or lines
     adjacencies: vector of 2D vectors storing connected points in the grid
     value: interpolated values of `func` at the intersection points
+    (optional) parents: indices on the parent grid cells
 
 Note that passing both nonempty `lines` and `levels` will create a result with both types of points mixed.
 """
@@ -329,11 +344,12 @@ function marching_triangles(
         func,
         lines,
         levels;
+        return_parent_cells = false,
         Tc = T,
         Tp = SVector{2, Tc},
         Tv = Float64
     ) where {T <: Number, Ti <: Number}
-    return marching_triangles([coord], [cellnodes], [func], lines, levels; Tc, Tp, Tv)
+    return marching_triangles([coord], [cellnodes], [func], lines, levels, return_parent_cells; Tc, Tp, Tv)
 end
 
 
@@ -349,6 +365,7 @@ function marching_triangles(
         funcs,
         lines,
         levels;
+        return_parent_cells = false,
         Tc = T,
         Tp = SVector{2, Tc},
         Tv = Float64
@@ -356,6 +373,7 @@ function marching_triangles(
     points = Vector{Tp}(undef, 0)
     values = Vector{Tv}(undef, 0)
     adjacencies = Vector{SVector{2, Ti}}(undef, 0)
+    parents = Vector{Ti}(undef, 0)
 
     for igrid in 1:length(coords)
         func = funcs[igrid]
@@ -366,7 +384,7 @@ function marching_triangles(
 
         # the objective_func is used to determine the intersection (line equation or iso levels)
         # the value_func is used to interpolate values at the intersections
-        function isect(tri_nodes, objective_func, value_func)
+        function isect(tri_nodes, objective_func, value_func, itri)
             (i1, i2, i3) = (1, 2, 3)
 
             # 3 values of the objective function
@@ -415,6 +433,7 @@ function marching_triangles(
                 push!(values, value2)
                 # connect last two points
                 push!(adjacencies, SVector{2, Ti}((length(points) - 1, length(points))))
+                push!(parents, itri)
             end
 
             return
@@ -432,7 +451,7 @@ function marching_triangles(
                     objective_values,
                     tri_nodes
                 )
-                @views isect(tri_nodes, objective_values, func)
+                @views isect(tri_nodes, objective_values, func, itri)
             end
 
             for line in lines
@@ -444,10 +463,15 @@ function marching_triangles(
                     objective_values,
                     tri_nodes
                 )
-                @views isect(tri_nodes, objective_values, func)
+                @views isect(tri_nodes, objective_values, func, itri)
             end
 
         end
     end
-    return points, adjacencies, values
+
+    if return_parent_cells
+        return points, adjacencies, values, parents
+    else
+        return points, adjacencies, values
+    end
 end
