@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.1.0] - unreleased
+
+### Added
+
+- `marching_triangles` and `marching_tetrahedra` return also the original parent cell indices if `return_parent_cells = true`
+
 ## [3.0.2] - 2025-05-22
 
 ### Fixed
@@ -14,7 +20,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- Reworked `tet_x_plane!()` to improve tetrahedron-plane-crosssection
+- Reworked `tet_x_plane!()` to improve tetrahedron-plane cross section
 
 ## [3.0.0] - 2025-03-03
 
