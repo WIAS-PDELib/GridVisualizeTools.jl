@@ -78,7 +78,6 @@ function calculate_plane_tetrahedron_intersection!(
         )
         return 0
     end
-
     amount_intersections = 0
 
     @inbounds for n1 in 1:4
@@ -233,7 +232,7 @@ function marching_tetrahedra(
 
     function pushtris(ns, ixcoord, ixvalues)
         # number of intersection points can be 3 or 4
-        if ns >= 3
+        return if ns >= 3
             last_i = length(all_ixvalues)
             for is in 1:ns
                 @views push!(all_ixcoord, ixcoord[:, is])
@@ -356,7 +355,6 @@ function marching_triangles(
     points = Vector{Tp}(undef, 0)
     values = Vector{Tv}(undef, 0)
     adjacencies = Vector{SVector{2, Ti}}(undef, 0)
-
     for igrid in 1:length(coords)
         func = funcs[igrid]
         coord = coords[igrid]
@@ -416,7 +414,6 @@ function marching_triangles(
                 # connect last two points
                 push!(adjacencies, SVector{2, Ti}((length(points) - 1, length(points))))
             end
-
             return
         end
 
