@@ -222,11 +222,10 @@ function marching_tetrahedra(
         @views push!(all_ixvalues, primevalues[iprime])
     end
 
-    planeq = zeros(4)
-    ixcoord = zeros(3, 6)
-    ixvalues = zeros(6)
-    cn = zeros(4)
-    node_indices = zeros(Int32, 4)
+    planeq = @MArray zeros(4)
+    ixcoord = @MArray zeros(3, 6)
+    ixvalues = @MArray zeros(6)
+    node_indices = @MArray zeros(Int32, 4)
 
     # Function to evaluate plane equation
     @inbounds @fastmath plane_equation(plane, coord) = coord[1] * plane[1] + coord[2] * plane[2] + coord[3] * plane[3] + plane[4]
