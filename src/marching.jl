@@ -4,11 +4,11 @@ function assign_coordinates_at_point_in_plane!(
         coordinates,
         function_values,
         node_index,
-        intersection_count
+        intersection_index
     )
 
-    @views ixcoord[:, intersection_count] .= coordinates[:, node_index]
-    ixvalues[intersection_count] = function_values[node_index]
+    @views ixcoord[:, intersection_index] .= coordinates[:, node_index]
+    ixvalues[intersection_index] = function_values[node_index]
 
     return nothing
 
@@ -23,17 +23,15 @@ function assign_coordinates_at_intersection!(
         planeq_values_end,
         node_index_start,
         node_index_end,
-        intersection_count
+        intersection_index
     )
 
     t = planeq_values_start / (planeq_values_start - planeq_values_end)
-    @views @. ixcoord[:, intersection_count] = coordinates[:, node_index_start] + t * (coordinates[:, node_index_end] - coordinates[:, node_index_start])
-    ixvalues[intersection_count] = function_values[node_index_start] + t * (function_values[node_index_end] - function_values[node_index_start])
+    @views @. ixcoord[:, intersection_index] = coordinates[:, node_index_start] + t * (coordinates[:, node_index_end] - coordinates[:, node_index_start])
+    ixvalues[intersection_index] = function_values[node_index_start] + t * (function_values[node_index_end] - function_values[node_index_start])
 
     return nothing
 end
-
-
 """
   $(SIGNATURES)
   Calculate intersections between tetrahedron with given piecewise linear
@@ -64,6 +62,7 @@ end
 function calculate_plane_tetrahedron_intersection!(
         ixcoord,
         ixvalues,
+        ixindeces,
         coordinates,
         node_indices,
         planeq_values,
@@ -80,21 +79,25 @@ function calculate_plane_tetrahedron_intersection!(
     end
 
     amount_intersections = 0
+    edge_index = 4
 
     @inbounds for n1 in 1:4
         N1 = node_indices[n1]
         if abs(planeq_values[n1]) < tol
             amount_intersections += 1
-            assign_coordinates_at_point_in_plane!(ixcoord, ixvalues, coordinates, function_values, N1, amount_intersections)
+            ixindeces[amount_intersections] = n1
+            assign_coordinates_at_point_in_plane!(ixcoord, ixvalues, coordinates, function_values, N1, n1)
         else
             for n2 in (n1 + 1):4
+                edge_index += 1
                 N2 = node_indices[n2]
                 if (abs(planeq_values[n2]) < tol) # We do not allow the 2nd node to be in the plane
                     continue
                 end
                 if planeq_values[n1] * planeq_values[n2] < tol^2
                     amount_intersections += 1
-                    assign_coordinates_at_intersection!(ixcoord, ixvalues, coordinates, function_values, planeq_values[n1], planeq_values[n2], N1, N2, amount_intersections)
+                    ixindeces[amount_intersections] = edge_index
+                    assign_coordinates_at_intersection!(ixcoord, ixvalues, coordinates, function_values, planeq_values[n1], planeq_values[n2], N1, N2, edge_index)
                 end
             end
         end
@@ -223,20 +226,21 @@ function marching_tetrahedra(
     end
 
     planeq = @MArray zeros(4)
-    ixcoord = @MArray zeros(3, 6)
-    ixvalues = @MArray zeros(6)
+    ixcoord = @MArray zeros(3, 10)
+    ixvalues = @MArray zeros(10)
     node_indices = @MArray zeros(Int32, 4)
+    ixindices = @MArray zeros(Int32, 6)
 
     # Function to evaluate plane equation
     @inbounds @fastmath plane_equation(plane, coord) = coord[1] * plane[1] + coord[2] * plane[2] + coord[3] * plane[3] + plane[4]
 
-    function pushtris(ns, ixcoord, ixvalues)
+    function pushtris(ns, ixcoord, ixvalues, ixindices)
         # number of intersection points can be 3 or 4
         if ns >= 3
             last_i = length(all_ixvalues)
             for is in 1:ns
-                @views push!(all_ixcoord, ixcoord[:, is])
-                push!(all_ixvalues, ixvalues[is]) # todo consider nan_replacement here
+                @views push!(all_ixcoord, ixcoord[:, ixindices[is]])
+                push!(all_ixvalues, ixvalues[ixindices[is]]) # todo consider nan_replacement here
             end
             push!(all_ixfaces, (last_i + 1, last_i + 2, last_i + 3))
             if ns == 4
@@ -267,13 +271,14 @@ function marching_tetrahedra(
                 nxs = calculate_plane_tetrahedron_intersection!(
                     ixcoord,
                     ixvalues,
+                    ixindices,
                     coord,
                     node_indices,
                     planeq,
                     func;
                     tol = tol
                 )
-                pushtris(nxs, ixcoord, ixvalues)
+                pushtris(nxs, ixcoord, ixvalues, ixindices)
             end
         end
 
