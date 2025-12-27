@@ -50,6 +50,8 @@ function bregion_cmap(n)
 end
 
 """
+$(SIGNATURES)
+
 Create color tuple from  color description (e.g. string)
 
 ```jldoctest
