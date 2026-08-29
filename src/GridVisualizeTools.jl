@@ -11,6 +11,7 @@ import ColorSchemes
 using DocStringExtensions: SIGNATURES, TYPEDEF, TYPEDSIGNATURES
 using StaticArraysCore: SVector
 using StaticArrays: @MArray
+using GeometryBasics # replace by SArray!
 
 include("colors.jl")
 export region_cmap, bregion_cmap, rgbtuple, rgbcolor
@@ -18,8 +19,15 @@ export region_cmap, bregion_cmap, rgbtuple, rgbcolor
 include("extraction.jl")
 export extract_visible_cells3D, extract_visible_bfaces3D
 
+include("linearsimplex.jl")
+export LinearSimplex, LinearSimplexIterator
+export LinearEdge, LinearTriangle, LinearTetrahedron
+export testloop
+
 include("marching.jl")
+include("marching_iterators.jl")
 export marching_tetrahedra, marching_triangles
+
 
 include("markerpoints.jl")
 export markerpoints
